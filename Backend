@@ -1,0 +1,142 @@
+### Step-by-Step Guide
+
+#### 1. Setting Up Your Project
+
+First, ensure you have Node.js installed on your system. Then, create a new directory for your project and initialize a new Node.js project:
+
+```bash
+mkdir referral-api
+cd referral-api
+npm init -y
+```
+
+Next, install necessary dependencies including Express.js, Prisma, nodemailer, and mysql2:
+
+```bash
+npm install express @prisma/client nodemailer mysql2
+```
+
+#### 2. Configure Prisma and MySQL
+
+Prisma is a modern database toolkit that makes working with databases easy. Initialize Prisma in your project:
+
+```bash
+npx prisma init
+```
+
+Follow the prompts to set up Prisma with your MySQL database. Update the `schema.prisma` file to define your database schema:
+
+```prisma
+// schema.prisma
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Referral {
+  id            Int      @id @default(autoincrement())
+  referrerName  String
+  referrerEmail String
+  friendName    String
+  friendEmail   String
+  createdAt     DateTime @default(now())
+}
+```
+
+Apply the schema to your MySQL database using Prisma:
+
+```bash
+npx prisma db push
+```
+
+#### 3. Create Express Server and APIs
+
+Create a new file `server.js` for your Express server and API endpoints:
+
+```javascript
+// server.js
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const { PrismaClient } = require('@prisma/client');
+const nodemailer = require('nodemailer');
+
+const prisma = new PrismaClient();
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(bodyParser.json());
+
+// API endpoint to handle referral form submission
+app.post('/api/referral', async (req, res) => {
+  const { referrerName, referrerEmail, friendName, friendEmail } = req.body;
+
+  // Basic validation
+  if (!referrerName || !referrerEmail || !friendName || !friendEmail) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  try {
+    // Save referral data to database using Prisma
+    const referral = await prisma.referral.create({
+      data: {
+        referrerName,
+        referrerEmail,
+        friendName,
+        friendEmail,
+      },
+    });
+
+    // Send referral email using nodemailer
+    await sendReferralEmail(referral);
+
+    return res.status(201).json(referral);
+  } catch (error) {
+    console.error('Error saving referral:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Function to send referral email
+async function sendReferralEmail(referral) {
+  // Configure nodemailer with Google Mail Service API
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: 'your-email@gmail.com', // replace with your Gmail email
+      pass: 'your-password', // replace with your Gmail password or app-specific password
+    },
+  });
+
+  const mailOptions = {
+    from: 'your-email@gmail.com',
+    to: referral.friendEmail,
+    subject: 'You have been referred to our platform!',
+    text: `Dear ${referral.friendName},\n\nYou have been referred by ${referral.referrerName} to our platform. Sign up today!`,
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+```
+
+#### 4. Error Handling
+
+Error handling is implemented within the `/api/referral` endpoint where we check for missing fields and catch any errors during database operations or email sending. Extend error handling as per your specific requirements.
+
+#### 5. Email Notification
+
+The `sendReferralEmail` function uses nodemailer to send an email to the referred friend upon successful submission of the referral form. Ensure you replace `'your-email@gmail.com'` and `'your-password'` with your Gmail credentials or use environment variables for security.
+
+#### 6. Testing
+
+Test your APIs using tools like Postman or by making HTTP requests from your frontend application.
